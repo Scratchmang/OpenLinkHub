@@ -2222,9 +2222,197 @@ $(document).ready(function () {
             syncKeyboardView(deviceProfile);
         }
 
+        syncReactiveFadeControls(device);
+
         lastSyncedUserProfile = activeUserProfile;
         lastSyncedKeyboardProfile = deviceProfile.Profile || "";
         lastSyncedKeyboardLayout = deviceProfile.Layout || "";
+    }
+
+    function syncReactiveFadeControls(device) {
+        const keyboardRgbProfile = $('.keyboardRgbProfile');
+        if (keyboardRgbProfile.length === 0) {
+            return;
+        }
+
+        const reactiveOption = keyboardRgbProfile.find('option[value="0;reactive-fade"]');
+        if (reactiveOption.length === 0) {
+            $('.reactiveFadeConfigure').remove();
+            return;
+        }
+
+        reactiveOption.text(i18n.t('txtReactiveFade', 'Reactive Fade'));
+
+        const row = keyboardRgbProfile.closest('.settings-row');
+        if (row.length === 0) {
+            return;
+        }
+
+        let button = row.find('.reactiveFadeConfigure');
+        if (button.length === 0) {
+            button = $('<button>', {
+                type: 'button',
+                class: 'system-button compact reactiveFadeConfigure',
+                text: i18n.t('txtConfigure', 'Configure')
+            });
+            row.append(button);
+        } else {
+            button.text(i18n.t('txtConfigure', 'Configure'));
+        }
+
+        button.toggle(keyboardRgbProfile.val() === '0;reactive-fade');
+    }
+
+    function getReactiveFadeSelection() {
+        return $('.keyboardColor.device-selected').map(function () {
+            const info = ($(this).attr('data-info') || '').split(';');
+            const keyId = parseInt(info[0], 10);
+            return Number.isInteger(keyId) ? keyId : null;
+        }).get().filter(function (value) {
+            return value !== null;
+        });
+    }
+
+    function openReactiveFadeSettings(device) {
+        if (!device || !device.DeviceProfile) {
+            toast.warning(i18n.t('txtUnableToSaveReactiveFade', 'Unable to load Reactive Fade settings'));
+            return;
+        }
+
+        const profileName = device.DeviceProfile.Profile;
+        const keyboard = device.DeviceProfile.Keyboards && device.DeviceProfile.Keyboards[profileName];
+        if (!keyboard) {
+            toast.warning(i18n.t('txtUnableToSaveReactiveFade', 'Unable to load Reactive Fade settings'));
+            return;
+        }
+
+        const pressColor = keyboard.reactiveFadePressColor || {red: 255, green: 255, blue: 255};
+        const duration = Number(keyboard.reactiveFadeDuration) || 500;
+        const selectedKeys = getReactiveFadeSelection();
+        const defaultScope = selectedKeys.length === 1 ? 0 : (selectedKeys.length > 1 ? 3 : 2);
+        const pressHex = rgbToHex(
+            Math.max(0, Math.min(255, Math.round(pressColor.red || 0))),
+            Math.max(0, Math.min(255, Math.round(pressColor.green || 0))),
+            Math.max(0, Math.min(255, Math.round(pressColor.blue || 0)))
+        );
+
+        const modalElement = `
+            <div class="modal fade" id="systemModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-custom modal-500">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${i18n.t('txtReactiveFadeSettings', 'Reactive Fade Settings')}</h5>
+                            <button class="btn-close btn-close-white" type="button" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="settings-list">
+                                <div class="settings-row">
+                                    <span class="settings-label text-ellipsis">${i18n.t('txtPressColor', 'Press Color')}</span>
+                                    <div class="system-color compact">
+                                        <label for="reactiveFadePressColor">
+                                            <input type="color" id="reactiveFadePressColor" value="${pressHex}">
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <span class="settings-label text-ellipsis">${i18n.t('txtFadeDuration', 'Fade Duration (ms)')}</span>
+                                    <div class="system-input text-input compact max-width-120">
+                                        <input type="number" id="reactiveFadeDuration" min="50" max="10000" step="10" value="${duration}">
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <span class="settings-label text-ellipsis">${i18n.t('txtKeySelection', 'Key Selection')}</span>
+                                    <label for="reactiveFadeScope">
+                                        <select id="reactiveFadeScope" class="form-select system-select compact auto-width">
+                                            <option value="0">${i18n.t('txtCurrentKey', 'Current Key')}</option>
+                                            <option value="1">${i18n.t('txtCurrentRow', 'Current Row')}</option>
+                                            <option value="2">${i18n.t('txtAllKeys', 'All Keys')}</option>
+                                            <option value="3">${i18n.t('txtSelectedKeys', 'Selected Keys')}</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="settings-row">
+                                    <span class="settings-label text-ellipsis">${i18n.t('txtSelectedKeys', 'Selected Keys')}</span>
+                                    <span class="meta-value reactiveFadeSelectedCount">${selectedKeys.length}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="system-button secondary" type="button" data-bs-dismiss="modal">${i18n.t('txtClose', 'Close')}</button>
+                            <button class="system-button" type="button" id="btnSaveReactiveFade">${i18n.t('txtSave', 'Save')}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modal = $(modalElement).modal('toggle');
+        modal.find('#reactiveFadeScope').val(String(defaultScope));
+
+        modal.find('#reactiveFadeScope').on('change', function () {
+            const scope = parseInt($(this).val(), 10);
+            if ((scope === 0 || scope === 1 || scope === 3) && selectedKeys.length === 0) {
+                toast.warning(i18n.t('txtSelectValidKey', 'Select a valid key first'));
+                $(this).val('2');
+            }
+        });
+
+        modal.find('#btnSaveReactiveFade').on('click', function () {
+            const scope = parseInt(modal.find('#reactiveFadeScope').val(), 10);
+            const durationValue = parseInt(modal.find('#reactiveFadeDuration').val(), 10);
+            if (!Number.isInteger(durationValue) || durationValue < 50 || durationValue > 10000) {
+                toast.warning(i18n.t('txtInvalidReactiveFadeDuration', 'Invalid Reactive Fade duration'));
+                return;
+            }
+
+            if ((scope === 0 || scope === 1) && selectedKeys.length === 0) {
+                toast.warning(i18n.t('txtSelectValidKey', 'Select a valid key first'));
+                return;
+            }
+
+            if (scope === 3 && selectedKeys.length === 0) {
+                toast.warning(i18n.t('txtInvalidKeySelected', 'Invalid key selected'));
+                return;
+            }
+
+            const color = hexToRgb(modal.find('#reactiveFadePressColor').val());
+            if (!color) {
+                return;
+            }
+
+            const payload = {
+                deviceId: $('#deviceId').val(),
+                keyOption: scope,
+                keyId: selectedKeys.length > 0 ? selectedKeys[0] : 0,
+                keys: selectedKeys,
+                color: {red: color.r, green: color.g, blue: color.b},
+                value: durationValue
+            };
+
+            $.ajax({
+                url: '/api/keyboard/reactiveFade',
+                type: 'POST',
+                data: JSON.stringify(payload),
+                cache: false,
+                success: function (response) {
+                    if (response.status === 1) {
+                        toast.success(response.message);
+                        modal.modal('hide');
+                        setTimeout(function () { location.reload(); }, 250);
+                    } else {
+                        toast.warning(response.message);
+                    }
+                },
+                error: function () {
+                    toast.warning(i18n.t('txtUnableToSaveReactiveFade', 'Unable to save Reactive Fade settings'));
+                }
+            });
+        });
+
+        modal.on('hidden.bs.modal', function () {
+            modal.data('bs.modal', null);
+            modal.remove();
+        });
     }
 
     function syncKeyboardView(deviceProfile) {
@@ -2818,7 +3006,31 @@ $(document).ready(function () {
         });
     });
 
+    $(document).on('click', '.reactiveFadeConfigure', function () {
+        const deviceId = $('#deviceId').val();
+        if (!deviceId) {
+            return;
+        }
+
+        $.ajax({
+            url: '/api/devices/' + deviceId,
+            type: 'GET',
+            cache: false,
+            success: function (result) {
+                if (result && result.device) {
+                    openReactiveFadeSettings(result.device);
+                } else {
+                    toast.warning(i18n.t('txtUnableToSaveReactiveFade', 'Unable to load Reactive Fade settings'));
+                }
+            },
+            error: function () {
+                toast.warning(i18n.t('txtUnableToSaveReactiveFade', 'Unable to load Reactive Fade settings'));
+            }
+        });
+    });
+
     $('.keyboardRgbProfile').on('change', function () {
+        syncReactiveFadeControls();
         const deviceId = $("#deviceId").val();
         const profile = $(this).val().split(";");
         if (profile.length < 2 || profile.length > 2) {
@@ -5491,6 +5703,8 @@ $(document).ready(function () {
             }
         });
     });
+
+    syncReactiveFadeControls();
 
     $('.setHardwareLight').on('change', function () {
         const deviceId = $("#deviceId").val();

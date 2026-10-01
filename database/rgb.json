@@ -119,6 +119,16 @@
     },
     "custom": {},
     "keyboard": {},
+    "reactive-fade": {
+      "profileName": "Reactive Fade",
+      "start": {
+        "red": 255,
+        "green": 255,
+        "blue": 255,
+        "brightness": 1
+      },
+      "speed": 1
+    },
     "stand": {},
     "mousepad": {},
     "mouse": {},

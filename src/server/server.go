@@ -1485,6 +1485,17 @@ func setKeyboardColor(w http.ResponseWriter, r *http.Request) {
 	resp.Send(w)
 }
 
+// setReactiveFade handles Reactive Fade keyboard settings.
+func setReactiveFade(w http.ResponseWriter, r *http.Request) {
+	request := requests.ProcessReactiveFade(r)
+	resp := &Response{
+		Code:    request.Code,
+		Status:  request.Status,
+		Message: request.Message,
+	}
+	resp.Send(w)
+}
+
 // setMiscColor handles misc device color change
 func setMiscColor(w http.ResponseWriter, r *http.Request) {
 	request := requests.ProcessMiscColor(r)
@@ -2692,6 +2703,7 @@ func setRoutes() http.Handler {
 	handleFunc(r, "/api/dashboard/devices/add", http.MethodPost, addDashboardDevice)
 	handleFunc(r, "/api/argb", http.MethodPost, setARGBDevice)
 	handleFunc(r, "/api/keyboard/color", http.MethodPost, setKeyboardColor)
+	handleFunc(r, "/api/keyboard/reactiveFade", http.MethodPost, setReactiveFade)
 	handleFunc(r, "/api/misc/color", http.MethodPost, setMiscColor)
 	handleFunc(r, "/api/userProfile/change", http.MethodPost, changeUserProfile)
 	handleFunc(r, "/api/keyboard/profile/change", http.MethodPost, changeKeyboardProfile)

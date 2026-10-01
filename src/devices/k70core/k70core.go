@@ -156,6 +156,7 @@ var (
 		"gpu-temperature",
 		"gradient",
 		"keyboard",
+		"reactive-fade",
 		"off",
 		"rainbow",
 		"pastelrainbow",
@@ -280,6 +281,7 @@ func (d *Device) GetRgbProfiles() interface{} {
 
 // Stop will stop all device operations and switch a device back to hardware mode
 func (d *Device) Stop() {
+	keyboards.StopReactiveFade(d.Serial)
 	d.Exit = true
 	logger.Log(logger.Fields{"serial": d.Serial, "product": d.Product}).Info("Stopping device...")
 	if d.activeRgb != nil {
@@ -310,6 +312,7 @@ func (d *Device) Stop() {
 
 // StopDirty will stop device in a dirty way
 func (d *Device) StopDirty() uint8 {
+	keyboards.StopReactiveFade(d.Serial)
 	d.Exit = true
 	logger.Log(logger.Fields{"serial": d.Serial, "product": d.Product}).Info("Stopping device (dirty)...")
 	if d.activeRgb != nil {
@@ -1590,6 +1593,16 @@ func (d *Device) ControlDeviceRgb(value bool) {
 	d.setDeviceColor()
 }
 
+// renderReactiveFade writes one complete Reactive Fade RGB frame.
+func (d *Device) renderReactiveFade(colors map[int]rgb.Color) {
+	keyboard := d.getCurrentKeyboard()
+	if keyboard == nil {
+		return
+	}
+	buf := keyboards.BuildReactiveFadeInterleavedFrame(keyboard, colors, colorPacketLength, 1)
+	d.writeColor(buf)
+}
+
 // setDeviceColor will activate and set device RGB
 func (d *Device) setDeviceColor() {
 	if d.DeviceProfile == nil {
@@ -1624,6 +1637,23 @@ func (d *Device) setDeviceColor() {
 	}
 
 	if d.DeviceProfile.BrightnessLevel == 0 {
+		return
+	}
+
+	if d.DeviceProfile.RGBProfile == "reactive-fade" {
+		keyboard := d.getCurrentKeyboard()
+		if keyboard == nil {
+			logger.Log(logger.Fields{"serial": d.Serial}).Error("Unable to set Reactive Fade color. Unknown keyboard")
+			return
+		}
+
+		config := keyboards.ReactiveFadeConfig{
+			PressColor: keyboard.ReactiveFadePressColor,
+			Duration:   keyboard.ReactiveFadeDuration,
+			Keys:       keyboard.ReactiveFadeKeys,
+		}
+		brightness := 1.0
+		keyboards.StartReactiveFade(d.Serial, keyboard, config, brightness, d.renderReactiveFade)
 		return
 	}
 
@@ -2059,7 +2089,7 @@ func (d *Device) setBrightnessLevel() {
 				logger.Log(logger.Fields{"error": err, "serial": d.Serial}).Warn("Unable to change brightness")
 			}
 		} else {
-			if d.DeviceProfile.RGBProfile == "keyboard" || d.DeviceProfile.RGBProfile == "static" {
+			if d.DeviceProfile.RGBProfile == "keyboard" || d.DeviceProfile.RGBProfile == "static" || d.DeviceProfile.RGBProfile == "reactive-fade" {
 				buf := make([]byte, 2)
 				binary.LittleEndian.PutUint16(buf[0:2], d.DeviceProfile.BrightnessLevel)
 				_, err := d.transfer(cmdBrightness, buf)
@@ -2351,6 +2381,9 @@ func (d *Device) triggerKeyAssignment(value []byte, functionKey bool, modifierKe
 		raw[i], raw[j] = raw[j], raw[i]
 	}
 	val := new(big.Int).SetBytes(raw)
+	// Reactive Fade reuses this existing normalized HID bitmap; no second
+	// keyboard input listener is opened.
+	keyboards.UpdateReactiveFade(d.Serial, d.ModifierIndex, val)
 
 	// Check if we have any queue in macro tracker. If yes, release those keys
 	if len(d.MacroTracker) > 0 {

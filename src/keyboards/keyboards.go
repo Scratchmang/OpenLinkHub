@@ -49,19 +49,22 @@ type KeyActuation struct {
 }
 
 type Keyboard struct {
-	Version             int           `json:"version"`
-	Key                 string        `json:"key"`
-	Device              string        `json:"device"`
-	Layout              string        `json:"layout"`
-	BufferSize          int           `json:"bufferSize"`
-	KeyAssignmentLength int           `json:"keyAssignmentLength"`
-	Rows                int           `json:"rows"`
-	Row                 map[int]Row   `json:"row"`
-	Zones               map[int]Zones `json:"zones"`
-	Color               rgb.Color     `json:"color"`
-	UppercaseClass      string        `json:"uppercaseClass"`
-	FontSize            int           `json:"fontSize"`
-	ModifierPosition    uint8         `json:"modifierPosition"`
+	Version                int           `json:"version"`
+	Key                    string        `json:"key"`
+	Device                 string        `json:"device"`
+	Layout                 string        `json:"layout"`
+	BufferSize             int           `json:"bufferSize"`
+	KeyAssignmentLength    int           `json:"keyAssignmentLength"`
+	Rows                   int           `json:"rows"`
+	Row                    map[int]Row   `json:"row"`
+	Zones                  map[int]Zones `json:"zones"`
+	Color                  rgb.Color     `json:"color"`
+	UppercaseClass         string        `json:"uppercaseClass"`
+	FontSize               int           `json:"fontSize"`
+	ModifierPosition       uint8         `json:"modifierPosition"`
+	ReactiveFadePressColor rgb.Color     `json:"reactiveFadePressColor,omitempty"`
+	ReactiveFadeDuration   uint32        `json:"reactiveFadeDuration,omitempty"`
+	ReactiveFadeKeys       []int         `json:"reactiveFadeKeys,omitempty"`
 }
 
 type Zones struct {
@@ -263,6 +266,9 @@ func MigrateProfiles(profiles map[string]*Keyboard, layout *Keyboard, keyboardKe
 
 		if saved != nil {
 			merged.Color = saved.Color
+			merged.ReactiveFadePressColor = saved.ReactiveFadePressColor
+			merged.ReactiveFadeDuration = saved.ReactiveFadeDuration
+			merged.ReactiveFadeKeys = append([]int(nil), saved.ReactiveFadeKeys...)
 			for id, zone := range merged.Zones {
 				if previous, ok := saved.Zones[id]; ok {
 					zone.Color = previous.Color

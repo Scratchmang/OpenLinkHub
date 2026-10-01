@@ -3217,6 +3217,45 @@ func ProcessKeyboardColor(r *http.Request) *Payload {
 	return &Payload{Message: language.GetValue("txtUnableToChangeDeviceColor"), Code: http.StatusOK, Status: 0}
 }
 
+// ProcessReactiveFade will process Reactive Fade keyboard settings.
+func ProcessReactiveFade(r *http.Request) *Payload {
+	req := &Payload{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Log(map[string]interface{}{"error": err}).Error("Unable to decode JSON")
+		return &Payload{Message: language.GetValue("txtUnableToValidateRequest"), Code: http.StatusOK, Status: 0}
+	}
+
+	if len(req.DeviceId) == 0 || devices.GetDevice(req.DeviceId) == nil {
+		return &Payload{Message: language.GetValue("txtNonExistingDevice"), Code: http.StatusOK, Status: 0}
+	}
+
+	if req.KeyOption < 0 || req.KeyOption > 3 {
+		return &Payload{Message: language.GetValue("txtInvalidKeyOptionSelected"), Code: http.StatusOK, Status: 0}
+	}
+
+	if req.Value < 50 || req.Value > 10000 {
+		return &Payload{Message: language.GetValue("txtInvalidReactiveFadeDuration"), Code: http.StatusOK, Status: 0}
+	}
+
+	if req.Color.Red < 0 || req.Color.Red > 255 || req.Color.Green < 0 || req.Color.Green > 255 || req.Color.Blue < 0 || req.Color.Blue > 255 {
+		return &Payload{Message: language.GetValue("txtInvalidColorSelected"), Code: http.StatusOK, Status: 0}
+	}
+
+	if req.KeyOption == 3 && len(req.Keys) == 0 {
+		return &Payload{Message: language.GetValue("txtInvalidKeySelected"), Code: http.StatusOK, Status: 0}
+	}
+
+	if req.KeyOption < 2 && req.KeyId < 0 {
+		return &Payload{Message: language.GetValue("txtInvalidKeySelected"), Code: http.StatusOK, Status: 0}
+	}
+
+	if devices.UpdateReactiveFadeProfile(req.DeviceId, req.KeyOption, req.KeyId, req.Color, uint32(req.Value), req.Keys) == 1 {
+		return &Payload{Message: language.GetValue("txtReactiveFadeSaved"), Code: http.StatusOK, Status: 1}
+	}
+
+	return &Payload{Message: language.GetValue("txtUnableToSaveReactiveFade"), Code: http.StatusOK, Status: 0}
+}
+
 // ProcessMiscColor will process a POST request from a client for misc device color change
 func ProcessMiscColor(r *http.Request) *Payload {
 	req := &Payload{}

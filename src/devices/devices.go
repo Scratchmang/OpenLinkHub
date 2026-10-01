@@ -126,6 +126,7 @@ import (
 	"OpenLinkHub/src/devices/xc7"
 	"OpenLinkHub/src/dispatcher"
 	"OpenLinkHub/src/inputmanager"
+	"OpenLinkHub/src/keyboards"
 	"OpenLinkHub/src/logger"
 	"OpenLinkHub/src/metrics"
 	"OpenLinkHub/src/motherboards"
@@ -409,6 +410,158 @@ func CallDeviceMethod(deviceId string, methodName string, args ...interface{}) [
 	}
 
 	return method.Call(reflectArgs)
+}
+
+// UpdateReactiveFadeProfile updates the Reactive Fade settings stored with
+// the currently selected keyboard profile. Keyboard drivers share the same
+// exported DeviceProfile field shape, but each driver has its own concrete
+// DeviceProfile type, so reflection is used here to keep the feature generic.
+func UpdateReactiveFadeProfile(deviceId string, keyOption, keyId int, color rgb.Color, duration uint32, selections []int) uint8 {
+	mutex.Lock()
+	device, ok := devices[deviceId]
+	if !ok || device == nil || device.Instance == nil {
+		mutex.Unlock()
+		return 0
+	}
+
+	instance := reflect.ValueOf(device.Instance)
+	if instance.Kind() != reflect.Ptr || instance.IsNil() {
+		mutex.Unlock()
+		return 0
+	}
+
+	deviceProfile := instance.Elem().FieldByName("DeviceProfile")
+	if !deviceProfile.IsValid() || deviceProfile.IsNil() {
+		mutex.Unlock()
+		return 0
+	}
+
+	profileValue := deviceProfile.Elem()
+	profileField := profileValue.FieldByName("Profile")
+	keyboardsField := profileValue.FieldByName("Keyboards")
+	if !profileField.IsValid() || !keyboardsField.IsValid() || !keyboardsField.CanInterface() {
+		mutex.Unlock()
+		return 0
+	}
+
+	profileName, ok := profileField.Interface().(string)
+	keyboardMap, mapOK := keyboardsField.Interface().(map[string]*keyboards.Keyboard)
+	keyboard, keyboardOK := keyboardMap[profileName]
+	if !ok || !mapOK || !keyboardOK || keyboard == nil {
+		mutex.Unlock()
+		return 0
+	}
+
+	if keyOption < 0 || keyOption > 3 {
+		mutex.Unlock()
+		return 0
+	}
+
+	if duration == 0 {
+		duration = 500
+	}
+
+	if color.Red < 0 || color.Red > 255 || color.Green < 0 || color.Green > 255 || color.Blue < 0 || color.Blue > 255 {
+		mutex.Unlock()
+		return 0
+	}
+
+	var keys []int
+	switch keyOption {
+	case 0:
+		if _, ok := keyboardKey(keyboard, keyId); !ok {
+			mutex.Unlock()
+			return 0
+		}
+		keys = []int{keyId}
+	case 1:
+		rowFound := false
+		for _, row := range keyboard.Row {
+			if _, ok := row.Keys[keyId]; !ok {
+				continue
+			}
+			rowFound = true
+			keys = make([]int, 0, len(row.Keys))
+			for key := range row.Keys {
+				keys = append(keys, key)
+			}
+			break
+		}
+		if !rowFound {
+			mutex.Unlock()
+			return 0
+		}
+	case 2:
+		keys = nil
+	case 3:
+		if len(selections) == 0 {
+			mutex.Unlock()
+			return 0
+		}
+		keys = make([]int, 0, len(selections))
+		seen := make(map[int]struct{}, len(selections))
+		for _, selected := range selections {
+			if _, ok := seen[selected]; ok {
+				continue
+			}
+			if _, ok := keyboardKey(keyboard, selected); !ok {
+				continue
+			}
+			seen[selected] = struct{}{}
+			keys = append(keys, selected)
+		}
+		if len(keys) == 0 {
+			mutex.Unlock()
+			return 0
+		}
+	}
+
+	keyboard.ReactiveFadePressColor = color
+	keyboard.ReactiveFadeDuration = duration
+	keyboard.ReactiveFadeKeys = keys
+	mutex.Unlock()
+
+	results := CallDeviceMethod(deviceId, "SaveDeviceProfile", profileName, false)
+	if len(results) == 0 || results[0].Uint() != 1 {
+		return 0
+	}
+
+	// If Reactive Fade is currently selected, re-render immediately with the
+	// new settings. Otherwise the settings remain stored for the next use.
+	mutex.Lock()
+	device, ok = devices[deviceId]
+	if ok && device != nil && device.Instance != nil {
+		instance = reflect.ValueOf(device.Instance)
+		if instance.Kind() == reflect.Ptr && !instance.IsNil() {
+			deviceProfile = instance.Elem().FieldByName("DeviceProfile")
+			if deviceProfile.IsValid() && !deviceProfile.IsNil() {
+				profileValue = deviceProfile.Elem()
+				rgbField := profileValue.FieldByName("RGBProfile")
+				if rgbField.IsValid() && rgbField.CanInterface() {
+					if current, ok := rgbField.Interface().(string); ok && current == "reactive-fade" {
+						mutex.Unlock()
+						CallDeviceMethod(deviceId, "UpdateRgbProfile", 0, "reactive-fade")
+						return 1
+					}
+				}
+			}
+		}
+	}
+	mutex.Unlock()
+
+	return 1
+}
+
+func keyboardKey(keyboard *keyboards.Keyboard, keyId int) (*keyboards.Key, bool) {
+	if keyboard == nil {
+		return nil, false
+	}
+	for _, row := range keyboard.Row {
+		if key, ok := row.Keys[keyId]; ok {
+			return &key, true
+		}
+	}
+	return nil, false
 }
 
 // GetProducts will return all available products
