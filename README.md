@@ -5,6 +5,16 @@ Manage RGB lighting, fan speeds, system metrics, as well as keyboards, mice, and
 ![Build](https://github.com/jurkovic-nikola/OpenLinkHub/actions/workflows/go.yml/badge.svg)
 [![](https://dcbadge.limes.pink/api/server/https://discord.gg/mPHcasZRPy?style=flat)](https://discord.gg/mPHcasZRPy)
 
+## Reactive Fade addition
+
+I have added an experimental **Reactive Fade** RGB mode for supported Corsair keyboards. When a key is pressed, it lights up in a configurable colour and smoothly fades back to its normal colour. Multiple keys can fade independently at the same time.
+
+This is my addition to OpenLinkHub. Many thanks to the original creator, **Nikola Jurkovic**, for creating and maintaining this project and making it possible to build on it.
+
+[More information about Reactive Fade](docs/reactive-fade.md)
+
+**Current limitation:** Shift keys do not currently trigger Reactive Fade. The other tested keys work normally.
+
 **Available in other languages:** [Portuguese (Brazil)](README-pt_BR.md)
 
 ## Features
